@@ -77,24 +77,24 @@ const useTheme = () => useContext(ThemeCtx);
 
 const defaultObj = (n) => ({
   name: n === 1 ? "ETW 1.DG + 2.DG" : `Objekt ${n}`,
-  flaeche: n === 1 ? 81.2 : n === 2 ? 65 : 55,
-  kpEtw: n === 1 ? 410000 : n === 2 ? 280000 : 220000,
-  kpTg: n === 1 ? 30000 : n === 2 ? 20000 : 15000,
-  grest: 0.05, notar: 0.02, makler: 0, reno: n === 3 ? 5000 : 0,
-  ek: n === 1 ? 170000 : n === 2 ? 80000 : 60000,
-  zins: n === 1 ? 0.0329 : n === 2 ? 0.035 : 0.038,
-  tilg: n === 1 ? 0.015 : 0.02,
+  flaeche: n === 1 ? 81.2 : 0,
+  kpEtw: n === 1 ? 410000 : 0,
+  kpTg: n === 1 ? 30000 : 0,
+  grest: n === 1 ? 0.05 : 0, notar: n === 1 ? 0.02 : 0, makler: 0, reno: 0,
+  ek: n === 1 ? 50000 : 0,
+  zins: n === 1 ? 0.0329 : 0,
+  tilg: n === 1 ? 0.015 : 0,
   stAktiv: n === 1, stSatz: 0.05,
-  gebAnt: n === 1 ? 0.8 : n === 2 ? 0.75 : 0.78,
-  mieteQm: n === 1 ? 17 : n === 2 ? 14 : 13,
-  stellplatz: n === 1 ? 80 : n === 2 ? 60 : 0,
-  ausfall: n === 1 ? 0.02 : n === 2 ? 0.03 : 0.02,
-  nulk: n === 1 ? 50 : n === 2 ? 40 : 35,
-  ruecklQm: n === 1 ? 1.5 : n === 2 ? 1.2 : 1.0,
+  gebAnt: n === 1 ? 0.8 : 0,
+  mieteQm: n === 1 ? 17 : 0,
+  stellplatz: n === 1 ? 80 : 0,
+  ausfall: n === 1 ? 0.02 : 0,
+  nulk: n === 1 ? 50 : 0,
+  ruecklQm: n === 1 ? 1.5 : 0,
   inst: 0, verw: 0,
-  afaSatz: (n === 2) ? 0.02 : 0.05,
-  afaDauer: (n === 2) ? 0 : 6,
-  afaLin: 0.02,
+  afaSatz: n === 1 ? 0.05 : 0,
+  afaDauer: n === 1 ? 6 : 0,
+  afaLin: n === 1 ? 0.02 : 0,
 });
 
 function calc(o) {
@@ -297,7 +297,7 @@ export default function App() {
   const [activeObj, setActiveObj] = useState(0);
   const [objects, setObjects] = useState([defaultObj(1), defaultObj(2), defaultObj(3)]);
   const [enabled, setEnabled] = useState([true, false, false]);
-  const [gehalt, setGehalt] = useState(85000);
+  const [gehalt, setGehalt] = useState(50000);
   const [steuersatz, setSteuersatz] = useState(0.44);
   const [exitJahr, setExitJahr] = useState(10);
   const [exitWertst, setExitWertst] = useState(0.015);
@@ -578,3 +578,4 @@ export default function App() {
     </ThemeCtx.Provider>
   );
 }
+
