@@ -1,6 +1,6 @@
-import { useState, useMemo, useCallback, createContext, useContext } from "react";
+import { useState, useMemo, useCallback, useEffect, createContext, useContext } from "react";
 
-const TABS = ["Objekt", "Finanzierung", "Cashflow", "Steuer", "Portfolio", "Exit"];
+const TABS = ["Objekt", "Finanzierung", "Cashflow", "Steuer", "Portfolio", "Exit", "Export"];
 
 const fmt = (v, d = 0) => {
   if (v === null || v === undefined || isNaN(v)) return "–";
@@ -295,12 +295,40 @@ export default function App() {
 
   const [tab, setTab] = useState(0);
   const [activeObj, setActiveObj] = useState(0);
-  const [objects, setObjects] = useState([defaultObj(1), defaultObj(2), defaultObj(3)]);
-  const [enabled, setEnabled] = useState([true, false, false]);
-  const [gehalt, setGehalt] = useState(50000);
-  const [steuersatz, setSteuersatz] = useState(0.44);
+  const [objects, setObjects] = useState(() => {
+    try { const s = localStorage.getItem('dealiq_objects'); return s ? JSON.parse(s) : [defaultObj(1), defaultObj(2), defaultObj(3)]; } catch { return [defaultObj(1), defaultObj(2), defaultObj(3)]; }
+  });
+  const [enabled, setEnabled] = useState(() => {
+    try { const s = localStorage.getItem('dealiq_enabled'); return s ? JSON.parse(s) : [true, false, false]; } catch { return [true, false, false]; }
+  });
+  const [gehalt, setGehalt] = useState(() => {
+    try { const s = localStorage.getItem('dealiq_gehalt'); return s ? JSON.parse(s) : 50000; } catch { return 50000; }
+  });
+  const [steuersatz, setSteuersatz] = useState(() => {
+    try { const s = localStorage.getItem('dealiq_steuersatz'); return s ? JSON.parse(s) : 0.44; } catch { return 0.44; }
+  });
   const [exitJahr, setExitJahr] = useState(10);
   const [exitWertst, setExitWertst] = useState(0.015);
+
+  // Auto-save to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('dealiq_objects', JSON.stringify(objects));
+      localStorage.setItem('dealiq_enabled', JSON.stringify(enabled));
+      localStorage.setItem('dealiq_gehalt', JSON.stringify(gehalt));
+      localStorage.setItem('dealiq_steuersatz', JSON.stringify(steuersatz));
+    } catch {}
+  }, [objects, enabled, gehalt, steuersatz]);
+
+  const resetAll = () => {
+    if (confirm('Alle Daten zurücksetzen?')) {
+      setObjects([defaultObj(1), defaultObj(2), defaultObj(3)]);
+      setEnabled([true, false, false]);
+      setGehalt(50000);
+      setSteuersatz(0.44);
+      try { localStorage.clear(); } catch {}
+    }
+  };
 
   const toggleEnabled = useCallback((i) => {
     setEnabled(prev => {
@@ -341,6 +369,108 @@ export default function App() {
     const gew = netto + kumCf - portfolio.ek;
     return { verkPreis: vp, restschuld: rs, verkKosten: vk, vorfaellig: vf, netto, kumCf, gewinn: gew, rendite: portfolio.ek > 0 ? gew / portfolio.ek : 0, renditePA: portfolio.ek > 0 ? gew / portfolio.ek / exitJahr : 0, steuerfrei: exitJahr >= 10 };
   }, [calcs, portfolio, exitJahr, exitWertst, steuer.ersparnis, enabled]);
+
+  // ── Export functions ──
+  const exportCSV = () => {
+    const rows = [
+      ['IMMOBILIEN INVESTMENT ANALYSE - EXPORT'],
+      ['Erstellt am', new Date().toLocaleDateString('de-DE')],
+      [],
+      ['=== PORTFOLIO ÜBERSICHT ==='],
+      ['Aktive Objekte', enabled.filter(Boolean).length],
+      ['Gesamtinvestition', portfolio.invest],
+      ['Eigenkapital', portfolio.ek],
+      ['Fremdkapital', portfolio.fk],
+      [],
+      ['=== MIETEINNAHMEN & KOSTEN (jährlich) ==='],
+      ['Mieteinnahmen (netto)', portfolio.mieteNetto],
+      ['Bewirtschaftungskosten', portfolio.bkJ],
+      ['Zinsen', portfolio.zinsenJ],
+      ['Tilgung (regulär)', portfolio.tilgJ],
+      ['Sondertilgung', portfolio.stBetrag],
+      ['Cashflow vor Steuern', portfolio.cfVor],
+      [],
+      ['=== STEUERBERECHNUNG ==='],
+      ['Brutto-Gehalt', gehalt],
+      ['Steuersatz', steuersatz * 100 + '%'],
+      ['ZvE ohne Immobilien', steuer.zveOhne],
+      ['ZvE mit Immobilien', steuer.zveMit],
+      ['Steuerersparnis gesamt', steuer.ersparnis],
+      ['Steuerersparnis monatlich', steuer.ersparnis / 12],
+      [],
+      ['=== EXIT-RECHNUNG ==='],
+      ['Verkauf nach Jahren', exitJahr],
+      ['Verkaufspreis', exit.verkPreis],
+      ['Restschuld', exit.restschuld],
+      ['Netto-Erlös', exit.netto],
+      ['Gesamtgewinn', exit.gewinn],
+      ['Rendite p.a.', (exit.renditePA * 100).toFixed(1) + '%'],
+    ];
+
+    calcs.forEach((c, i) => {
+      if (!enabled[i]) return;
+      rows.push([], [`=== OBJEKT ${i+1}: ${objects[i].name} ===`]);
+      rows.push(['Wohnfläche (m²)', objects[i].flaeche]);
+      rows.push(['Kaufpreis', c.kpGes]);
+      rows.push(['Gesamtinvestition', c.invest]);
+      rows.push(['Eigenkapital', objects[i].ek]);
+      rows.push(['Fremdkapital', c.fk]);
+      rows.push(['Zinssatz', objects[i].zins * 100 + '%']);
+      rows.push(['Tilgung', objects[i].tilg * 100 + '%']);
+      rows.push(['Sondertilgung aktiv', objects[i].stAktiv ? 'Ja' : 'Nein']);
+      rows.push(['Miete €/m²', objects[i].mieteQm]);
+      rows.push(['Stellplatz €/Mon', objects[i].stellplatz]);
+      rows.push(['Mieteinnahmen netto p.a.', c.mieteNetto]);
+      rows.push(['AfA jährlich', c.afaSonderJ]);
+      rows.push(['Einkünfte V+V', c.vuv]);
+      rows.push(['Cashflow vor Steuern', c.cfVor]);
+      rows.push([], ['--- Tilgungsplan ---']);
+      rows.push(['Jahr', 'Restschuld', 'Zinsen', 'Tilgung', 'Sondertilg.', 'Rest Ende']);
+      c.tp.forEach(r => {
+        rows.push([r.yr, r.anfang.toFixed(2), r.zins.toFixed(2), r.tilg.toFixed(2), r.sonder.toFixed(2), r.ende.toFixed(2)]);
+      });
+    });
+
+    const csv = rows.map(r => r.map(v => typeof v === 'number' ? v.toFixed(2) : (v ?? '')).join(';')).join('\n');
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `DealIQ_Export_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportPDF = () => {
+    window.print();
+  };
+
+  const exportJSON = () => {
+    const data = { objects, enabled, gehalt, steuersatz, exitJahr, exitWertst, exportDate: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `DealIQ_Backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const importJSON = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.objects) setObjects(data.objects);
+        if (data.enabled) setEnabled(data.enabled);
+        if (data.gehalt) setGehalt(data.gehalt);
+        if (data.steuersatz) setSteuersatz(data.steuersatz);
+        if (data.exitJahr) setExitJahr(data.exitJahr);
+        if (data.exitWertst) setExitWertst(data.exitWertst);
+        alert('Daten erfolgreich importiert!');
+      } catch { alert('Fehler beim Importieren'); }
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <ThemeCtx.Provider value={T}>
@@ -567,6 +697,76 @@ export default function App() {
                 <div style={{ width: 1, background: T.border }} />
                 <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 700, color: T.copper, fontFeatureSettings: "'tnum'" }}>{fmtP(exit.renditePA)}</div><div style={{ fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>P.A.</div></div>
               </div>
+            </Card>
+          </>}
+
+          {tab === 6 && <>
+            <Card title="Daten speichern">
+              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.7, marginBottom: 16 }}>
+                Deine Eingaben werden automatisch im Browser gespeichert. Beim nächsten Öffnen sind alle Daten noch da.
+              </div>
+              <div style={{ padding: "12px 16px", borderRadius: 10, background: T.greenBg, border: `1px solid ${T.green}20`, fontSize: 12, color: T.green, fontWeight: 600, marginBottom: 8 }}>
+                ✓ Auto-Save aktiv
+              </div>
+            </Card>
+
+            <Card title="Excel-Export (CSV)">
+              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.7, marginBottom: 16 }}>
+                Exportiert alle Objekte, Portfolio, Steuerberechnung und Tilgungspläne als CSV-Datei. Öffnet sich direkt in Excel, Numbers oder Google Sheets.
+              </div>
+              <button onClick={exportCSV} style={{
+                width: "100%", padding: "14px", borderRadius: 10, border: "none", cursor: "pointer",
+                background: T.copper, color: T.bg, fontSize: 14, fontWeight: 700,
+                fontFamily: "inherit", letterSpacing: 0.3,
+              }}>
+                CSV für Excel exportieren
+              </button>
+            </Card>
+
+            <Card title="PDF-Export">
+              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.7, marginBottom: 16 }}>
+                Öffnet die Druckansicht – dort kannst du als PDF speichern. Tipp: Wechsle vorher zum Tab den du drucken möchtest.
+              </div>
+              <button onClick={exportPDF} style={{
+                width: "100%", padding: "14px", borderRadius: 10, border: "none", cursor: "pointer",
+                background: T.copper, color: T.bg, fontSize: 14, fontWeight: 700,
+                fontFamily: "inherit", letterSpacing: 0.3,
+              }}>
+                Als PDF drucken / speichern
+              </button>
+            </Card>
+
+            <Card title="Backup & Teilen">
+              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.7, marginBottom: 16 }}>
+                Speichere deine kompletten Eingaben als Datei – oder importiere ein Backup von einem anderen Gerät oder Freund.
+              </div>
+              <button onClick={exportJSON} style={{
+                width: "100%", padding: "14px", borderRadius: 10, border: "none", cursor: "pointer",
+                background: T.copper, color: T.bg, fontSize: 14, fontWeight: 700,
+                fontFamily: "inherit", letterSpacing: 0.3, marginBottom: 10,
+              }}>
+                Backup exportieren (.json)
+              </button>
+              <label style={{
+                display: "block", width: "100%", padding: "14px", borderRadius: 10,
+                border: `1px solid ${T.copper}`, cursor: "pointer",
+                background: "transparent", color: T.copper, fontSize: 14, fontWeight: 700,
+                fontFamily: "inherit", letterSpacing: 0.3, textAlign: "center",
+              }}>
+                Backup importieren
+                <input type="file" accept=".json" onChange={importJSON} style={{ display: "none" }} />
+              </label>
+            </Card>
+
+            <Card title="Zurücksetzen">
+              <button onClick={resetAll} style={{
+                width: "100%", padding: "14px", borderRadius: 10, border: "none", cursor: "pointer",
+                background: T.redBg, color: T.red, fontSize: 14, fontWeight: 700,
+                fontFamily: "inherit", letterSpacing: 0.3,
+                border: `1px solid ${T.red}30`,
+              }}>
+                Alle Daten zurücksetzen
+              </button>
             </Card>
           </>}
         </div>
